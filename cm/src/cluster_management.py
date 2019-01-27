@@ -11,10 +11,13 @@ class cluster_management(object):
         return server, user
 
     @staticmethod
-    def get_sge_file_content(command_list, gpu, max_time, node=-1,
-                             num_nodes=None,    # blue waters only
+    def get_sge_file_content(command_list, gpu, max_time, 
+                             node=-1,          # UIUC ALF cluster only
+                             num_nodes=None,    # blue waters/RCC
                              use_aprun=True,   # blue waters only
-                             ppn=2):
+                             ppn=2,
+                             exclusive=False   # RCC only
+                             ):
         assert (isinstance(command_list, list))
         temp_commands = []
         for item in command_list:
@@ -86,6 +89,29 @@ wait       # to wait for all jobs to finish
 echo "This job is DONE!"
 exit 0
 ''' % (max_time, num_nodes, ppn, node_type, '\n'.join(temp_commands))
+        elif 'rcc' in server_name:         # UChicago RCC cluster
+            if num_nodes is None:
+                num_nodes = len(command_list)
+            partition_string = 'gpu2' if gpu else 'fela'
+            gpu_option_string = '#SBATCH --gres=gpu:1' if gpu else ''
+            node_string = "" if node == -1 else "#$ -l hostname=compute-0-%d" % node
+            exclusive_mode_string = '#SBATCH --exclusive' if exclusive else ''
+
+            content_for_sge_file = '''#!/bin/bash
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=wei.herbert.chen@gmail.com
+#SBATCH --partition=%s
+%s
+#SBATCH --time=%s
+#SBATCH --nodes=%d
+#SBATCH --ntasks-per-node=%d
+%s
+
+%s
+wait       # to wait for all jobs to finish
+echo "This job is DONE!"
+exit 0
+''' % (partition_string, gpu_option_string, max_time, num_nodes, ppn, exclusive_mode_string, '\n'.join(temp_commands))
         else:
             raise Exception('server error: %s does not exist' % server_name)
         return content_for_sge_file
